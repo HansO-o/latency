@@ -1,0 +1,1 @@
+{"name":"cf-ws-latency","main":"dist/worker.mjs","compatibility_date":"2026-10-05","workers_dev":true,"observability":{"enabled":false}}
