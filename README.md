@@ -45,3 +45,40 @@ No application logging, persistent history, analytics, third-party scripts, or s
 Official API references:
 - https://developers.cloudflare.com/workers/runtime-apis/websockets/
 - https://developers.cloudflare.com/workers/runtime-apis/request/
+
+## Alibaba ESA: separate build and explicit capability boundary
+
+The Cloudflare files and deployment remain unchanged. This repository now also contains `esa.jsonc`, `esa/function.mjs`, `esa/build.mjs`, and an ESA-specific generated asset directory `esa-dist`. This is **ESA Functions and Pages**, not Alibaba Function Compute (FC).
+
+**This is not an ESA WebSocket implementation.** The current official ESA runtime reference does not document a WebSocket termination API equivalent to Cloudflare's `WebSocketPair`; the Fetch API documentation lists `Upgrade` and `Connection` among headers that cannot be read. ESA's documented WebSocket origin forwarding is a different feature. Therefore copying the Cloudflare handler or merely changing its entry path is not a verified solution. Without the original ESA build log, the exact build error has not been reproduced.
+
+The ESA landing page says WebSocket termination is not implemented. It does not start measurements automatically. The user can explicitly click “开始 HTTP 测试” to run the optional, clearly labeled HTTP echo experiment. It uses the same statistics and visual layout, but HTTP RTT is not directly comparable with WebSocket RTT. There is no forwarding to Cloudflare or any other origin. `/ws` intentionally returns 404 on ESA.
+
+### ESA Git build settings
+
+- Root: repository root (`/`)
+- Project: `latency` in `esa.jsonc`; change this name to your existing ESA project name before using the CLI if it differs
+- Install command: `node --version` (no dependencies)
+- Build command: `node esa/build.mjs`
+- Function entry: `./esa/function.mjs`
+- Static assets: `./esa-dist` (never `./dist`, which contains the Cloudflare bundle)
+- Node build version: 20 or newer
+- No SPA fallback: `/api/ping` must reach the function
+
+ESA's `esa.jsonc` settings override corresponding console build settings. The ESA entry is an ES-module default object with `fetch(request)` and uses only Request, URL, and Response APIs. No Cloudflare bindings, `request.cf`, Node server listener, or FC handler is used. The optional HTTP echo always returns `Cache-Control: no-store`; the browser also disables cache and uses a fresh nonce. No actual edge node identifier is available to this implementation: it reports `colo: null` and “节点标识不可用”, never a guessed city/IP. The browser bounds a run to 120 sequential requests, at most one outstanding request, 3-second timeout, one-second pause between requests, and stops on background/Stop. This client limit is not a server-wide cost or abuse cap.
+
+### Local verification
+
+    node esa/build.mjs
+    node --test esa/test.mjs
+    npm run build
+    npm test
+
+On 2026-10-05, ESA build/syntax checks and five adapter/client tests passed; the six original Cloudflare tests also passed. Tests cover HTTP route/method/sequence/no-cache behavior without Cloudflare APIs, start/stop/restart/stale replies/background stop, and 120-sample termination. They do not emulate Alibaba's production runtime. ESA cloud build and live HTTP/WSS have **not** been verified: the ESA console requires login. A Git push is not proof of an ESA deployment, even when Git-triggered builds are configured. No CF deployment, DNS, route, or paid plan was changed.
+
+Official references checked:
+- https://www.alibabacloud.com/help/en/edge-security-acceleration/esa/user-guide/build-pages
+- https://github.com/aliyun/alibabacloud-esa-cli/blob/master/docs/Config_en.md
+- https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/runtimeapi-manual
+- https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/fetch-1
+- https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/network-optimization-rules

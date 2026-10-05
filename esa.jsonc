@@ -1,0 +1,7 @@
+{
+  "name": "latency",
+  "entry": "./esa/function.mjs",
+  "installCommand": "node --version",
+  "buildCommand": "node esa/build.mjs",
+  "assets": {"directory": "./esa-dist"}
+}
