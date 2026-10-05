@@ -82,3 +82,40 @@ Official references checked:
 - https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/runtimeapi-manual
 - https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/fetch-1
 - https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/network-optimization-rules
+
+## ESA Stream API measurement (optional `/stream/`)
+
+Use the “Stream API 流式测试” link on the ESA HTTP page, or visit `/stream/`. Click Start to make one same-origin `GET /api/stream` request. The function creates a real `TransformStream`, returns `readable` immediately in its Response, and asynchronously writes 12 newline-delimited JSON records roughly 250 ms apart (about 2.75 seconds). It never calls an origin or Cloudflare. The producer stops on reader cancellation/write rejection and has an 8-second deadline; the browser has its own timeout and cancellation. HTTP echo remains available separately; Cloudflare WebSocket source/configuration is unchanged.
+
+This is a small response-stream timing experiment, **not WebSocket, bidirectional ping/pong RTT, one-way network delay, or a bandwidth/speed test**:
+
+- First-record latency includes request/connection preparation, edge processing, delivery, parsing and browser scheduling; it is not isolated TCP/TLS time or exact first-byte time.
+- Record interval median/P95 describes arrival spacing at this browser.
+- Interval deviation compares successive browser arrival spacing with the server's successive elapsed-time spacing; the two clocks' absolute values are never subtracted. This still includes buffering and scheduling, so is not pure network jitter.
+- Completion time covers fetching and consuming the entire response.
+- Multiple records in one reader read, or unexpectedly tight arrival spacing despite separated server writes, produces a “suspected batching” warning. A read is not guaranteed to correspond to a server write, HTTP chunk, or TCP packet.
+
+The endpoint sends `Cache-Control: no-store, no-cache, max-age=0, no-transform` and `X-Accel-Buffering: no`; these are hints, not a guarantee of streaming flushes across ESA/proxies/compression. The browser uses `cache: no-store` and a nonce. A runtime or network path may still buffer data: the UI reports that rather than converting it into a fictitious RTT. No Content-Length, Transfer-Encoding, Connection, or Upgrade header is set by the function.
+
+### Runtime and verification notes
+
+The official ESA Stream API page describes TransformStream and warns about async buffering/deadlocks; it also says the ReadableStream constructor is not implemented, so this endpoint deliberately does not instantiate ReadableStream. Writes are not awaited before returning the Response. Current Functions and Pages documentation lists a 120-second response limit and a 10-second no-data wait; this experiment starts immediately and is bounded well below those limits. Timers and buffering remain subject to the actual ESA runtime.
+
+    node esa/build.mjs
+    node --test esa/test.mjs esa/stream-test.mjs esa/stream-client-test.mjs
+    npm run build
+    npm test
+
+Local tests include real timed TransformStream reads, early first record, paced records, cancellation, blocked-reader deadline, endpoint boundaries and browser parsing/lifecycle behavior. Node tests do not prove ESA production flush timing. The user deploys manually; verify the deployed `/stream/` count, read groups and batching warning before interpreting measurements. This commit does not implement screen sharing or cross-device rooms.
+
+References:
+- https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/stream-api
+- https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/what-is-functions-and-pages/
+
+### WebSocket network-plan distinction
+
+ESA's documented network WebSocket feature connects clients through ESA to a WebSocket origin. That does not establish a WebSocket server API inside Functions and Pages. Its January 2026 announcement says new free plans cannot enable WebSocket after January 13; previously enabled free plans retain it, but disabling it prevents re-enabling it. Basic and higher plans support the network feature. Do not toggle a grandfathered free-plan switch merely as a diagnostic. This project has made no plan or switch changes. Edge Containers are a separate product; the current official support table lists Enterprise only, so they are not a drop-in free replacement.
+
+- https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/network-optimization
+- https://www.alibabacloud.com/zh/notice/entrance_plan_announcement_on_websocket_feature_adjustments_for_edge_security_acceleration_esa_66c
+- https://help.aliyun.com/zh/edge-security-acceleration/esa/user-guide/overview-of-edge-containers/
